@@ -1,2 +1,5 @@
 allowBuilds:
-  unrs-resolver: true
+  "@tailwindcss/oxide": true
+  unrs-resolver: false
+  overrides:
+    lightningcss: 1.30.1
