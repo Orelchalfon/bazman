@@ -7,7 +7,7 @@ const SubscriptionDetails = () => {
   return (
     <View className='flex-1 items-center justify-center bg-white'>
       <Text>SubscriptionDetails : {id}</Text>
-      <Link href='/'>Go Back</Link>
+      <Link href='/index'>Go Back</Link>
     </View>
   );
 };
