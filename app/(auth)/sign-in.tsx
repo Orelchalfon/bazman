@@ -12,6 +12,12 @@ const SignIn = () => {
         className='mt-4 px-4 py-2 rounded-md text-2xl text-primary outline-4 outline-primary'>
         Sign up
       </Link>
+
+      <Link
+        href='/'
+        className='mt-4 px-4 py-2 rounded-md text-2xl text-primary outline-4 outline-primary'>
+        go back
+      </Link>
     </View>
   );
 };
