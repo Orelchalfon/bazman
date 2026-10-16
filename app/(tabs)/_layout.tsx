@@ -8,12 +8,7 @@ const TabIcon = ({ focused, icon }: TabIconProps) => {
   return (
     <View className='tabs-icon'>
       <View className={clsx("tabs-pill", focused && "tabs-active")}>
-        <Image
-          source={icon}
-          resizeMode='contain'
-          className='tabs-glyph'
-          tintColor={focused ? colors.primary : colors.card}
-        />
+        <Image source={icon} resizeMode='contain' className='tabs-glyph' />
       </View>
     </View>
   );

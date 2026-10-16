@@ -3,47 +3,20 @@
 @import "tailwindcss/utilities.css";
 
 @import "nativewind/theme";
+
 @theme {
-  --color-background: #fafcff;
-  --color-foreground: #131a29;
+  --color-background: #fff9e3;
+  --color-foreground: #081126;
+  --color-card: #fff8e7;
+  --color-muted: #f6eecf;
+  --color-muted-foreground: rgba(0, 0, 0, 0.6);
+  --color-primary: #0d1c40;
+  --color-accent: #ea7a53;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-success: #16a34a;
+  --color-destructive: #dc2626;
+  --color-subscription: #8fd1bd;
 
-  --color-card: #ffffff;
-  --color-card-foreground: #131a29;
-
-  --color-primary: #076be3;
-  --color-primary-foreground: #f8fcff;
-
-  --color-secondary: #f0f2f6;
-  --color-secondary-foreground: #303a50;
-
-  --color-muted: #f3f5f9;
-  --color-muted-foreground: #6c727e;
-
-  --color-accent: #e5f0fe;
-  --color-accent-foreground: #22477d;
-
-  --color-border: #e2e5e9;
-  --color-input: #e2e5e9;
-  --color-ring: #076be3;
-
-  --color-success: #2eac66;
-  --color-success-text: #00783f;
-  --color-success-foreground: #f9fdfa;
-
-  --color-destructive: #df202e;
-  --color-destructive-foreground: #fffafa;
-
-  --color-warning: #f0b135;
-  --color-warning-foreground: #391c00;
-
-  --color-coin: #eab532;
-  --color-coin-foreground: #3b2400;
-
-  --color-ks-navy-deep: #252e40;
-  --color-ks-cyan-soft: #ddedff;
-
-  /* App-specific token mapped to Kasp's soft blue */
-  --color-subscription: #ddedff;
   --spacing-0: 0px;
   --spacing-1: 4px;
   --spacing-2: 8px;
@@ -70,7 +43,6 @@
   --font-sans-semibold: sans-semibold;
   --font-sans-bold: sans-bold;
   --font-sans-extrabold: sans-extrabold;
-  /* Keep your existing spacing and font definitions here */
 }
 
 @layer components {
@@ -147,7 +119,7 @@
   }
 
   .upcoming-card {
-    @apply mr-4 w-44 rounded-2xl border border-black/10 bg-background p-4;
+    @apply mr-4 max-w-52 rounded-2xl border border-primary bg-background p-4;
   }
 
   .upcoming-row {
