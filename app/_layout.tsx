@@ -1,9 +1,12 @@
 import "@/global.css";
-import { ClerkProvider, useAuth } from "@clerk/expo";
+import { ClerkProvider, useAuth, useUser } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import { useFonts } from "expo-font";
 import { SplashScreen, Stack } from "expo-router";
-import { useEffect } from "react";
+import { PostHogProvider } from "posthog-react-native";
+import { useEffect, useRef } from "react";
+
+import { posthog } from "@/lib/posthog";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,6 +18,35 @@ if (!publishableKey) {
   );
 }
 
+/** Associates the current Clerk user with PostHog once per user ID while mounted. */
+function PostHogIdentity() {
+  const { user } = useUser();
+  const identifiedUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      identifiedUserId.current = null;
+      return;
+    }
+
+    if (!posthog || identifiedUserId.current === user.id) {
+      return;
+    }
+
+    const email = user.primaryEmailAddress?.emailAddress;
+    const name = user.fullName;
+
+    posthog.identify(user.id, {
+      ...(email ? { email } : {}),
+      ...(name ? { name } : {}),
+    });
+    identifiedUserId.current = user.id;
+  }, [user]);
+
+  return null;
+}
+
+/** Waits for fonts and authentication before rendering routes guarded by sign-in state. */
 function RootNavigator() {
   const { isLoaded, isSignedIn } = useAuth();
   const [fontsLoaded, fontError] = useFonts({
@@ -59,10 +91,25 @@ function RootNavigator() {
   );
 }
 
+/** Wraps navigation with the analytics provider and identity sync when PostHog is configured. */
+function PostHogRoot() {
+  if (!posthog) {
+    return <RootNavigator />;
+  }
+
+  return (
+    <PostHogProvider client={posthog}>
+      <PostHogIdentity />
+      <RootNavigator />
+    </PostHogProvider>
+  );
+}
+
+/** Provides Clerk authentication to the app's analytics and navigation components. */
 export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey!} tokenCache={tokenCache}>
-      <RootNavigator />
+      <PostHogRoot />
     </ClerkProvider>
   );
 }

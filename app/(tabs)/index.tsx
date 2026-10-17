@@ -9,6 +9,8 @@ import {
 import { icons } from "@/constants/icons";
 import images from "@/constants/images";
 import "@/global.css";
+import { posthog } from "@/lib/posthog";
+import { posthogLog } from "@/lib/posthog-logs";
 import { formatCurrency } from "@/lib/utils";
 import { useUser } from "@clerk/expo";
 import dayjs from "dayjs";
@@ -18,6 +20,7 @@ import { FlatList, Image, Text, View } from "react-native";
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 const SafeAreaView = styled(RNSafeAreaView);
 
+/** Renders the subscription dashboard and tracks subscription card expansions. */
 export default function App() {
   const { user } = useUser();
   const [expandedSubscriptionId, setExpandedSubscriptionId] = useState<
@@ -30,6 +33,19 @@ export default function App() {
     user?.fullName ||
     user?.emailAddresses[0]?.emailAddress ||
     "User";
+
+  const handleSubscriptionPress = (subscriptionId: string) => {
+    if (expandedSubscriptionId !== subscriptionId) {
+      posthog?.capture("subscription_expanded", {
+        subscription_id: subscriptionId,
+      });
+      posthogLog.subscriptionExpanded(subscriptionId);
+    }
+
+    setExpandedSubscriptionId((currentId) =>
+      currentId === subscriptionId ? null : subscriptionId,
+    );
+  };
 
   return (
     <SafeAreaView className='flex-1 bg-background p-5'>
@@ -91,11 +107,7 @@ export default function App() {
           <SubscriptionCard
             {...item}
             expanded={expandedSubscriptionId === item.id}
-            onPress={() =>
-              setExpandedSubscriptionId((currentId) =>
-                currentId === item.id ? null : item.id,
-              )
-            }
+            onPress={() => handleSubscriptionPress(item.id)}
           />
         )}
         extraData={expandedSubscriptionId}

@@ -19,6 +19,8 @@ import {
   validatePasswordPresent,
 } from "@/lib/auth";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { posthog } from "@/lib/posthog";
+import { posthogLog } from "@/lib/posthog-logs";
 import { useSignIn } from "@clerk/expo";
 import { Link, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -26,6 +28,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 type Pending = "submit" | "verify" | "resend" | null;
 
+/** Renders password sign-in and email verification, tracking completed sign-ins. */
 export default function SignIn() {
   const { signIn, errors, fetchStatus } = useSignIn();
   const { reset } = useLocalSearchParams<{ reset?: string }>();
@@ -92,6 +95,8 @@ export default function SignIn() {
           return;
         }
         // The root navigator's protected routes take over once the session is active.
+        posthog?.capture("user_signed_in");
+        posthogLog.authenticationCompleted("sign_in");
         hapticSuccess();
       },
     });

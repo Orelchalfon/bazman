@@ -20,6 +20,8 @@ import {
   validateNewPassword,
 } from "@/lib/auth";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { posthog } from "@/lib/posthog";
+import { posthogLog } from "@/lib/posthog-logs";
 import { useSignUp } from "@clerk/expo";
 import { Link } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -27,6 +29,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 type Pending = "submit" | "verify" | "resend" | null;
 
+/** Renders account registration and email verification, tracking completed sign-ups. */
 export default function SignUp() {
   const { signUp, errors, fetchStatus } = useSignUp();
   const cooldown = useResendCooldown();
@@ -157,6 +160,8 @@ export default function SignUp() {
             return;
           }
           // The root navigator's protected routes take over once the session is active.
+          posthog?.capture("user_signed_up");
+          posthogLog.authenticationCompleted("sign_up");
           hapticSuccess();
         },
       });
