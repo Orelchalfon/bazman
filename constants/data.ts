@@ -105,3 +105,17 @@ export const HOME_SUBSCRIPTIONS: Subscription[] = [
         color: "#b8e8d0",
     },
 ];
+export const INSIGHTS_WEEKLY_SPENDING = [
+    { day: "Mon", amount: 36 },
+    { day: "Tue", amount: 31 },
+    { day: "Wed", amount: 23 },
+    { day: "Thr", amount: 40 },
+    { day: "Fri", amount: 35 },
+    { day: "Sat", amount: 22 },
+    { day: "Sun", amount: 24 },
+];
+
+export const INSIGHTS_EXPENSES = {
+    month: "2026-03-01T00:00:00.000Z",
+    changePercent: 12,
+};
