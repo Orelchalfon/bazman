@@ -1,37 +1,34 @@
-import Constants from 'expo-constants';
-import PostHog from 'posthog-react-native';
+import Constants from 'expo-constants'
+import PostHog from 'posthog-react-native'
 
-const extra = Constants.expoConfig?.extra;
-const projectToken = extra?.posthogProjectToken as string | undefined;
-const host = extra?.posthogHost as string | undefined;
+const rawApiKey = Constants.expoConfig?.extra?.posthogProjectToken as string | undefined
+const rawHost = Constants.expoConfig?.extra?.posthogHost as string | undefined
 
-if (!projectToken && __DEV__) {
-  throw new Error(
-    'EXPO_PUBLIC_POSTHOG_PROJECT_TOKEN variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once EXPO_PUBLIC_POSTHOG_PROJECT_TOKEN is configured',
-  );
+// Trim and normalize API key and host
+const apiKey = rawApiKey?.trim()
+const host = rawHost?.trim()
+const isPostHogConfigured = !!apiKey && apiKey !== '' && apiKey !== 'phc_your_project_token_here'
+
+if (!isPostHogConfigured) {
+  console.warn(
+    'PostHog project token not configured. Analytics will be disabled. ' +
+    'Set POSTHOG_PROJECT_TOKEN in your .env file to enable analytics.'
+  )
 }
 
-if (!host && __DEV__) {
-  throw new Error(
-    'EXPO_PUBLIC_POSTHOG_HOST variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once EXPO_PUBLIC_POSTHOG_HOST is configured',
-  );
-}
-
-export const posthog =
-  projectToken && host
-    ? new PostHog(projectToken, {
-        host,
-        captureAppLifecycleEvents: true,
-        logs: {
-          serviceName: "bazman-mobile",
-        },
-        errorTracking: {
-          autocapture: {
-            uncaughtExceptions: true,
-            unhandledRejections: true,
-            console: [],
-          },
-        },
-        debug: __DEV__,
-      })
-    : null;
+export const posthog = new PostHog(apiKey || 'placeholder_key', {
+  ...(host ? { host } : {}),
+  disabled: !isPostHogConfigured,
+  captureAppLifecycleEvents: true,
+  debug: __DEV__,
+  flushAt: 20,
+  flushInterval: 10000,
+  maxBatchSize: 100,
+  maxQueueSize: 1000,
+  preloadFeatureFlags: true,
+  sendFeatureFlagEvent: true,
+  featureFlagsRequestTimeoutMs: 10000,
+  requestTimeout: 10000,
+  fetchRetryCount: 3,
+  fetchRetryDelay: 3000,
+})

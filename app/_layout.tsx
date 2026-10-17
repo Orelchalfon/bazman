@@ -24,6 +24,9 @@ function PostHogIdentity() {
 
   useEffect(() => {
     if (!user) {
+      if (identifiedUserId.current) {
+        posthog?.reset();
+      }
       identifiedUserId.current = null;
       return;
     }
@@ -32,11 +35,9 @@ function PostHogIdentity() {
       return;
     }
 
-    const email = user.primaryEmailAddress?.emailAddress;
     const name = user.fullName;
 
     posthog.identify(user.id, {
-      ...(email ? { email } : {}),
       ...(name ? { name } : {}),
     });
     identifiedUserId.current = user.id;
