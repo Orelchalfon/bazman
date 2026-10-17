@@ -249,7 +249,7 @@ You can further customize how PostHog works through its configuration on initial
 | `before_send` **Type:** Function **Default:** `undefined` | A callback function that is called before each event is sent to PostHog. You can use it to modify, filter, or suppress events. Return `null` to drop the event, or return the modified event to send it. See [customizing exception capture](#customizing-exception-capture-with-before_send) for details. |
 | `capturePushNotificationSubscriptions` **Type:** Boolean **Default:** `true` | Whether to automatically register this device's push token so [Workflows](/docs/workflows.md) can target it. Requires `@posthog/react-native-plugin`. See [push notifications](#push-notifications). Available in version 4.62.0+. |
 | `capturePushNotificationOpened` **Type:** Boolean **Default:** `true` | Whether to automatically capture `$push_notification_opened` when the user taps a push notification. Requires `@posthog/react-native-plugin`. See [push notifications](#push-notifications). Available in version 4.62.0+. |
-| `pushIdentityProvider` **Type:** Function **Default:** `undefined` | Supplies a signed identity-verification token for push subscription requests. Only needed when your push channel requires identity verification. See [identity verification](#identity-verification). Available in version 4.62.0+. |
+| `pushIdentityProvider` **Type:** Function **Default:** `undefined` | Supplies a signed identity-verification token for push subscription requests. Only needed when your push channel requires identity verification. See [identity verification](/docs/workflows/push-notifications.md#identity-verification). Available in version 4.62.0+. |
 
 ### Tracing headers
 
@@ -715,7 +715,7 @@ posthog.register({
 
 The call above ensures that every event sent by the user will include `"icecream pref": "vanilla"` and `"team_id": 22`. This way, if you filtered events by property using `icecream_pref = vanilla`, it would display all events captured on that user after the `posthog.register` call, since they all include the specified Super Property.
 
-This does **not** set the user's properties. This only sets the properties for their events. To store person properties, see the [setting person properties section](#setting-user-properties).
+This does **not** set the user's properties. This only sets the properties for their events. To store person properties, see the [setting person properties section](#setting-person-properties).
 
 ### Removing stored super properties
 
@@ -1297,7 +1297,7 @@ posthog.debug()
 
 ## Disabling for local development
 
-You may want to disable PostHog when working locally or in a test environment. You can do this by setting the `disable` option to `true` when initializing PostHog. Helpfully this allows you to continue using `usePostHog` and safely calling it without anything actually happening.
+You may want to disable PostHog when working locally or in a test environment. You can do this by setting the `disabled` option to `true` when initializing PostHog. Helpfully this allows you to continue using `usePostHog` and safely calling it without anything actually happening.
 
 React Native
 
