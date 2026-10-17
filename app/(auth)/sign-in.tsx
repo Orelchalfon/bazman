@@ -19,6 +19,8 @@ import {
   validatePasswordPresent,
 } from "@/lib/auth";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { posthog } from "@/lib/posthog";
+import { posthogLog } from "@/lib/posthog-logs";
 import { useSignIn } from "@clerk/expo";
 import { Link, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -92,6 +94,8 @@ export default function SignIn() {
           return;
         }
         // The root navigator's protected routes take over once the session is active.
+        posthog?.capture("user_signed_in");
+        posthogLog.authenticationCompleted("sign_in");
         hapticSuccess();
       },
     });
