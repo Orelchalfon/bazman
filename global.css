@@ -239,7 +239,7 @@
   }
 
   .auth-content {
-    @apply grow px-5 pb-10 pt-8;
+    @apply grow px-5 pb-8 pt-4;
   }
 
   .auth-brand-block {
@@ -251,7 +251,7 @@
   }
 
   .auth-logo-mark {
-    @apply relative size-14 items-center justify-center rounded-2xl bg-accent;
+    @apply relative size-14 items-center justify-center rounded-tl-lg rounded-tr-3xl rounded-bl-3xl rounded-br-none bg-accent;
   }
 
   .auth-logo-mark-text {
@@ -275,7 +275,7 @@
   }
 
   .auth-card {
-    @apply mt-8 rounded-3xl border border-border bg-card p-5;
+    @apply mt-6 rounded-3xl border border-border bg-card p-5;
   }
 
   .auth-form {
@@ -291,7 +291,7 @@
   }
 
   .auth-input {
-    @apply rounded-2xl border border-border bg-background px-4 py-4 text-base font-sans-medium text-primary;
+    @apply h-14 rounded-2xl border border-border bg-background px-4 py-0 text-base font-sans-medium text-primary ;
   }
 
   .auth-input-error {
@@ -348,6 +348,102 @@
 
   .auth-link {
     @apply text-sm font-sans-bold text-accent;
+  }
+
+  .auth-header {
+    @apply mt-2 items-center;
+  }
+
+  .auth-top-bar {
+    @apply mb-2 h-11 justify-center;
+  }
+
+  .auth-back {
+    @apply size-11 items-center justify-center rounded-full border border-border bg-card;
+  }
+
+  .auth-back-icon {
+    @apply size-5;
+  }
+
+  .auth-input-row {
+    @apply h-14 flex-row items-center rounded-2xl border border-border bg-background;
+  }
+
+  .auth-input-bare {
+    @apply h-full flex-1 px-4 py-0 text-base font-sans-medium text-primary;
+  }
+
+  .auth-eye {
+    @apply h-full items-center justify-center px-4;
+  }
+
+  .auth-label-row {
+    @apply flex-row items-center justify-between;
+  }
+
+  .auth-forgot {
+    @apply text-sm font-sans-semibold text-accent;
+  }
+
+  .auth-banner {
+    @apply flex-row items-start gap-2 rounded-2xl border px-4 py-3;
+  }
+
+  .auth-banner-error {
+    @apply border-destructive/25 bg-destructive/10;
+  }
+
+  .auth-banner-info {
+    @apply border-success/25 bg-success/10;
+  }
+
+  .auth-banner-text {
+    @apply flex-1 text-sm font-sans-medium text-primary;
+  }
+
+  .auth-code-input {
+    @apply rounded-2xl border border-border bg-background py-4 text-center text-3xl font-sans-bold tracking-[12px] text-primary;
+  }
+
+  .auth-strength-row {
+    @apply flex-row gap-1.5;
+  }
+
+  .auth-strength-bar {
+    @apply h-1 flex-1 rounded-full bg-muted;
+  }
+
+  .auth-resend-row {
+    @apply flex-row items-center justify-center gap-1;
+  }
+
+  .auth-trust-row {
+    @apply mt-6 flex-row items-center justify-center gap-2;
+  }
+
+  .auth-trust-text {
+    @apply text-xs font-sans-medium text-muted-foreground;
+  }
+
+  .auth-legal {
+    @apply text-center text-xs font-sans-medium text-muted-foreground;
+  }
+
+  .auth-email-highlight {
+    @apply font-sans-bold text-primary;
+  }
+
+  .settings-card {
+    @apply w-full gap-1 rounded-3xl border border-border bg-card p-5;
+  }
+
+  .settings-name {
+    @apply text-2xl font-sans-bold text-primary;
+  }
+
+  .settings-email {
+    @apply text-base font-sans-medium text-muted-foreground;
   }
 
   .modal-overlay {
