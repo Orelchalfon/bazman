@@ -18,6 +18,7 @@ if (!publishableKey) {
   );
 }
 
+/** Associates the current Clerk user with PostHog once per user ID while mounted. */
 function PostHogIdentity() {
   const { user } = useUser();
   const identifiedUserId = useRef<string | null>(null);
@@ -45,6 +46,7 @@ function PostHogIdentity() {
   return null;
 }
 
+/** Waits for fonts and authentication before rendering routes guarded by sign-in state. */
 function RootNavigator() {
   const { isLoaded, isSignedIn } = useAuth();
   const [fontsLoaded, fontError] = useFonts({
@@ -89,6 +91,7 @@ function RootNavigator() {
   );
 }
 
+/** Wraps navigation with the analytics provider and identity sync when PostHog is configured. */
 function PostHogRoot() {
   if (!posthog) {
     return <RootNavigator />;
@@ -102,6 +105,7 @@ function PostHogRoot() {
   );
 }
 
+/** Provides Clerk authentication to the app's analytics and navigation components. */
 export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey!} tokenCache={tokenCache}>
