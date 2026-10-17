@@ -19,6 +19,7 @@ import {
   validateNewPassword,
 } from "@/lib/auth";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { posthog } from "@/lib/posthog";
 import { useSignIn } from "@clerk/expo";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -134,6 +135,8 @@ export default function ForgotPassword() {
           signOutOfOtherSessions: true,
         });
       if (submitError) return fail(submitError);
+
+      posthog?.capture("password_reset_completed");
 
       if (signIn.status === "complete") {
         const { error: finalizeError } = await signIn.finalize({
