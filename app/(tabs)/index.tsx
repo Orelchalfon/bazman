@@ -1,4 +1,3 @@
-import { useUser } from "@clerk/expo";
 import ListHeading from "@/components/ListHeading";
 import SubscriptionCard from "@/components/SubscriptionCard";
 import UpcomingSubscriptionCard from "@/components/UpcomingSubscriptionCard";
@@ -11,6 +10,7 @@ import { icons } from "@/constants/icons";
 import images from "@/constants/images";
 import "@/global.css";
 import { formatCurrency } from "@/lib/utils";
+import { useUser } from "@clerk/expo";
 import dayjs from "dayjs";
 import { styled } from "nativewind";
 import { useState } from "react";
@@ -20,13 +20,16 @@ const SafeAreaView = styled(RNSafeAreaView);
 
 export default function App() {
   const { user } = useUser();
-  const displayName =
-    user?.firstName ||
-    user?.primaryEmailAddress?.emailAddress.split("@")[0] ||
-    "";
   const [expandedSubscriptionId, setExpandedSubscriptionId] = useState<
     string | null
   >(null);
+
+  // Get user display name: firstName, fullName, or email
+  const displayName =
+    user?.firstName ||
+    user?.fullName ||
+    user?.emailAddresses[0]?.emailAddress ||
+    "User";
 
   return (
     <SafeAreaView className='flex-1 bg-background p-5'>
@@ -35,7 +38,12 @@ export default function App() {
           <>
             <View className='home-header'>
               <View className='home-user'>
-                <Image source={images.avatar} className='home-avatar' />
+                <Image
+                  source={
+                    user?.imageUrl ? { uri: user.imageUrl } : images.avatar
+                  }
+                  className='home-avatar'
+                />
                 <Text className='home-user-name'>{displayName}</Text>
               </View>
 

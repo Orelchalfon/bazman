@@ -7,10 +7,13 @@ import ResendCode from "@/components/auth/ResendCode";
 import { useResendCooldown } from "@/hooks/useResendCooldown";
 import {
   AuthFieldErrors,
+  describeFieldError,
+  describeGlobalError,
   hasErrors,
+  logAuthError,
   maskEmail,
   normalizeEmail,
-  parseAuthError,
+  unmappedFieldError,
   validateCode,
   validateEmail,
   validatePasswordPresent,
@@ -21,31 +24,51 @@ import { Link, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
-type Step = "credentials" | "verify";
 type Pending = "submit" | "verify" | "resend" | null;
 
 export default function SignIn() {
-  const { signIn, fetchStatus } = useSignIn();
+  const { signIn, errors, fetchStatus } = useSignIn();
   const { reset } = useLocalSearchParams<{ reset?: string }>();
   const cooldown = useResendCooldown();
   const passwordRef = useRef<TextInput>(null);
 
-  const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [errors, setErrors] = useState<AuthFieldErrors>({});
-  const [banner, setBanner] = useState<string>();
+  const [clientErrors, setClientErrors] = useState<AuthFieldErrors>({});
+  const [localBanner, setLocalBanner] = useState<string>();
   const [info, setInfo] = useState<string>();
+  const [submitted, setSubmitted] = useState(false);
+  const [pending, setPending] = useState<Pending>(null);
+
+  // The step comes from the sign-in attempt itself, so it survives remounts.
+  const needsEmailCheck =
+    (signIn.status === "needs_second_factor" ||
+      signIn.status === "needs_client_trust") &&
+    !!signIn.supportedSecondFactors?.some(
+      (factor) => factor.strategy === "email_code",
+    );
+
+  // Clear a stale attempt (and its errors) left by another screen, unless it's mid-verification.
+  useEffect(() => {
+    if (!needsEmailCheck) signIn.reset();
+    // Run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Returning from a password reset that still needs a fresh sign-in.
   useEffect(() => {
     if (reset) setInfo("Password updated. Sign in with your new password.");
   }, [reset]);
-  const [submitted, setSubmitted] = useState(false);
-  const [pending, setPending] = useState<Pending>(null);
 
   const busy = pending !== null || fetchStatus === "fetching";
+  const banner = localBanner ?? describeGlobalError(errors.global);
+  const fieldErrors = {
+    email: clientErrors.email ?? describeFieldError(errors.fields.identifier),
+    password:
+      clientErrors.password ?? describeFieldError(errors.fields.password),
+    code: clientErrors.code ?? describeFieldError(errors.fields.code),
+  };
 
   const validateCredentials = (next = { email, password }) => ({
     email: validateEmail(next.email),
@@ -53,9 +76,8 @@ export default function SignIn() {
   });
 
   const fail = (error: unknown) => {
-    const parsed = parseAuthError(error);
-    setErrors(parsed.fields);
-    setBanner(parsed.message);
+    logAuthError(error);
+    setLocalBanner(unmappedFieldError(error, Object.keys(errors.fields)));
     setInfo(undefined);
     hapticError();
   };
@@ -64,7 +86,9 @@ export default function SignIn() {
     const { error } = await signIn.finalize({
       navigate: ({ session }) => {
         if (session?.currentTask) {
-          setBanner("Your account needs one more step before you can continue.");
+          setLocalBanner(
+            "Your account needs one more step before you can continue.",
+          );
           return;
         }
         // The root navigator's protected routes take over once the session is active.
@@ -74,36 +98,14 @@ export default function SignIn() {
     if (error) fail(error);
   };
 
-  const startEmailCheck = async () => {
-    const hasEmailFactor = signIn.supportedSecondFactors?.some(
-      (factor) => factor.strategy === "email_code",
-    );
-    if (!hasEmailFactor) {
-      setBanner(
-        "This account uses an extra verification method that isn't supported in the app yet.",
-      );
-      hapticError();
-      return;
-    }
-
-    const { error } = await signIn.mfa.sendEmailCode();
-    if (error) return fail(error);
-
-    cooldown.start();
-    setCode("");
-    setErrors({});
-    setBanner(undefined);
-    setStep("verify");
-  };
-
   const handleSignIn = async () => {
     if (busy) return;
     setSubmitted(true);
+    setLocalBanner(undefined);
 
-    const fieldErrors = validateCredentials();
-    setErrors(fieldErrors);
-    setBanner(undefined);
-    if (hasErrors(fieldErrors)) {
+    const nextErrors = validateCredentials();
+    setClientErrors(nextErrors);
+    if (hasErrors(nextErrors)) {
       hapticError();
       return;
     }
@@ -116,18 +118,33 @@ export default function SignIn() {
       });
       if (error) return fail(error);
 
-      switch (signIn.status) {
-        case "complete":
-          await finalize();
-          break;
-        case "needs_second_factor":
-        case "needs_client_trust":
-          await startEmailCheck();
-          break;
-        default:
-          setBanner("We couldn't finish signing you in. Please try again.");
-          hapticError();
+      if (signIn.status === "complete") {
+        await finalize();
+        return;
       }
+
+      const needsSecondStep =
+        signIn.status === "needs_second_factor" ||
+        signIn.status === "needs_client_trust";
+      const supportsEmail = signIn.supportedSecondFactors?.some(
+        (factor) => factor.strategy === "email_code",
+      );
+
+      if (needsSecondStep && supportsEmail) {
+        // Switches this screen to the code step via `needsEmailCheck`.
+        const { error: sendError } = await signIn.mfa.sendEmailCode();
+        if (sendError) return fail(sendError);
+        cooldown.start();
+        setCode("");
+        return;
+      }
+
+      setLocalBanner(
+        needsSecondStep
+          ? "This account uses an extra verification method that isn't supported in the app yet."
+          : "We couldn't finish signing you in. Please try again.",
+      );
+      hapticError();
     } catch (error) {
       fail(error);
     } finally {
@@ -137,9 +154,9 @@ export default function SignIn() {
 
   const handleVerify = async (value = code) => {
     if (busy) return;
+    setLocalBanner(undefined);
     const codeError = validateCode(value);
-    setErrors({ code: codeError });
-    setBanner(undefined);
+    setClientErrors({ code: codeError });
     if (codeError) {
       hapticError();
       return;
@@ -153,7 +170,7 @@ export default function SignIn() {
       if (signIn.status === "complete") {
         await finalize();
       } else {
-        setBanner("We couldn't verify this sign-in. Please try again.");
+        setLocalBanner("We couldn't verify this sign-in. Please try again.");
         hapticError();
       }
     } catch (error) {
@@ -166,12 +183,12 @@ export default function SignIn() {
   const handleResend = async () => {
     if (busy || !cooldown.canResend) return;
     setPending("resend");
+    setLocalBanner(undefined);
     try {
       const { error } = await signIn.mfa.sendEmailCode();
       if (error) return fail(error);
       cooldown.start();
-      setErrors({});
-      setBanner(undefined);
+      setClientErrors({});
       setInfo("A new code is on its way.");
     } catch (error) {
       fail(error);
@@ -182,14 +199,15 @@ export default function SignIn() {
 
   const backToCredentials = async () => {
     await signIn.reset();
-    setStep("credentials");
     setCode("");
-    setErrors({});
-    setBanner(undefined);
+    setClientErrors({});
+    setLocalBanner(undefined);
     setInfo(undefined);
   };
 
-  if (step === "verify") {
+  if (needsEmailCheck) {
+    const identifier = signIn.identifier ?? normalizeEmail(email);
+
     return (
       <AuthShell
         title='Confirm it’s you'
@@ -197,7 +215,7 @@ export default function SignIn() {
           <>
             We noticed a new device. Enter the 6-digit code we sent to{" "}
             <Text className='auth-email-highlight'>
-              {maskEmail(normalizeEmail(email))}
+              {maskEmail(identifier)}
             </Text>
             .
           </>
@@ -212,15 +230,15 @@ export default function SignIn() {
         }>
         <View className='auth-form'>
           <FormBanner message={banner} />
-          <FormBanner message={info} tone='info' />
+          {!banner && <FormBanner message={info} tone='info' />}
           <CodeField
             value={code}
             onChangeText={(value) => {
               setCode(value);
-              if (errors.code) setErrors({});
+              if (clientErrors.code) setClientErrors({});
             }}
             onComplete={handleVerify}
-            error={errors.code}
+            error={fieldErrors.code}
           />
           <AuthButton
             label='Verify and continue'
@@ -261,9 +279,10 @@ export default function SignIn() {
           value={email}
           onChangeText={(value) => {
             setEmail(value);
-            if (submitted) setErrors(validateCredentials({ email: value, password }));
+            if (submitted)
+              setClientErrors(validateCredentials({ email: value, password }));
           }}
-          error={errors.email}
+          error={fieldErrors.email}
           placeholder='you@example.com'
           keyboardType='email-address'
           autoCapitalize='none'
@@ -275,6 +294,7 @@ export default function SignIn() {
           onSubmitEditing={() => passwordRef.current?.focus()}
           editable={!busy}
           ltr
+          style={{ paddingStart: 8 }}
         />
 
         <AuthField
@@ -290,9 +310,10 @@ export default function SignIn() {
           value={password}
           onChangeText={(value) => {
             setPassword(value);
-            if (submitted) setErrors(validateCredentials({ email, password: value }));
+            if (submitted)
+              setClientErrors(validateCredentials({ email, password: value }));
           }}
-          error={errors.password}
+          error={fieldErrors.password}
           placeholder='Enter your password'
           secureToggle
           autoCapitalize='none'
@@ -303,6 +324,8 @@ export default function SignIn() {
           onSubmitEditing={handleSignIn}
           editable={!busy}
           ltr
+          style={{ paddingStart: 8 }}
+
         />
 
         <AuthButton

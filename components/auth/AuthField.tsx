@@ -30,7 +30,7 @@ export default function AuthField({
         <View className={clsx("auth-input-row", error && "auth-input-error")}>
           <TextInput
             ref={ref}
-            className='auth-input-bare'
+            className='auth-input-bare '
             placeholderTextColor={colors.mutedForeground}
             secureTextEntry={hidden}
             accessibilityLabel={label}

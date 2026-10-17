@@ -8,9 +8,12 @@ import ResendCode from "@/components/auth/ResendCode";
 import { useResendCooldown } from "@/hooks/useResendCooldown";
 import {
   AuthFieldErrors,
+  describeFieldError,
+  describeGlobalError,
   hasErrors,
+  logAuthError,
   normalizeEmail,
-  parseAuthError,
+  unmappedFieldError,
   validateCode,
   validateEmail,
   validateName,
@@ -19,30 +22,50 @@ import {
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { useSignUp } from "@clerk/expo";
 import { Link } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
-type Step = "details" | "verify";
 type Pending = "submit" | "verify" | "resend" | null;
 
 export default function SignUp() {
-  const { signUp, fetchStatus } = useSignUp();
+  const { signUp, errors, fetchStatus } = useSignUp();
   const cooldown = useResendCooldown();
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
-  const [step, setStep] = useState<Step>("details");
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [errors, setErrors] = useState<AuthFieldErrors>({});
-  const [banner, setBanner] = useState<string>();
+  const [clientErrors, setClientErrors] = useState<AuthFieldErrors>({});
+  const [localBanner, setLocalBanner] = useState<string>();
   const [info, setInfo] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
 
+  // The step comes from the sign-up attempt itself, so it survives remounts.
+  const needsEmailVerification =
+    signUp.status === "missing_requirements" &&
+    signUp.unverifiedFields.includes("email_address") &&
+    signUp.missingFields.length === 0;
+
+  // Clear a stale attempt (and its errors), unless it's waiting on the email code.
+  useEffect(() => {
+    if (!needsEmailVerification) signUp.reset();
+    // Run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const busy = pending !== null || fetchStatus === "fetching";
+  const banner = localBanner ?? describeGlobalError(errors.global);
+  const fieldErrors = {
+    firstName:
+      clientErrors.firstName ?? describeFieldError(errors.fields.firstName),
+    email: clientErrors.email ?? describeFieldError(errors.fields.emailAddress),
+    password:
+      clientErrors.password ?? describeFieldError(errors.fields.password),
+    code: clientErrors.code ?? describeFieldError(errors.fields.code),
+  };
 
   const validateDetails = (next = { firstName, email, password }) => ({
     firstName: validateName(next.firstName),
@@ -51,9 +74,8 @@ export default function SignUp() {
   });
 
   const fail = (error: unknown) => {
-    const parsed = parseAuthError(error);
-    setErrors(parsed.fields);
-    setBanner(parsed.message);
+    logAuthError(error);
+    setLocalBanner(unmappedFieldError(error, Object.keys(errors.fields)));
     setInfo(undefined);
     hapticError();
   };
@@ -61,11 +83,11 @@ export default function SignUp() {
   const handleSignUp = async () => {
     if (busy) return;
     setSubmitted(true);
+    setLocalBanner(undefined);
 
-    const fieldErrors = validateDetails();
-    setErrors(fieldErrors);
-    setBanner(undefined);
-    if (hasErrors(fieldErrors)) {
+    const nextErrors = validateDetails();
+    setClientErrors(nextErrors);
+    if (hasErrors(nextErrors)) {
       hapticError();
       return;
     }
@@ -79,13 +101,21 @@ export default function SignUp() {
       });
       if (error) return fail(error);
 
+      if (signUp.missingFields.length > 0) {
+        setLocalBanner(
+          "We need a bit more information to create your account. Please try again later.",
+        );
+        hapticError();
+        return;
+      }
+
+      // Switches this screen to the code step via `needsEmailVerification`.
       const { error: sendError } = await signUp.verifications.sendEmailCode();
       if (sendError) return fail(sendError);
 
       cooldown.start();
       setCode("");
-      setErrors({});
-      setStep("verify");
+      setClientErrors({});
     } catch (error) {
       fail(error);
     } finally {
@@ -95,9 +125,9 @@ export default function SignUp() {
 
   const handleVerify = async (value = code) => {
     if (busy) return;
+    setLocalBanner(undefined);
     const codeError = validateCode(value);
-    setErrors({ code: codeError });
-    setBanner(undefined);
+    setClientErrors({ code: codeError });
     if (codeError) {
       hapticError();
       return;
@@ -111,7 +141,7 @@ export default function SignUp() {
       if (error) return fail(error);
 
       if (signUp.status !== "complete") {
-        setBanner(
+        setLocalBanner(
           "Your email is verified, but we need a bit more information to finish creating your account.",
         );
         hapticError();
@@ -121,7 +151,9 @@ export default function SignUp() {
       const { error: finalizeError } = await signUp.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) {
-            setBanner("Your account needs one more step before you can continue.");
+            setLocalBanner(
+              "Your account needs one more step before you can continue.",
+            );
             return;
           }
           // The root navigator's protected routes take over once the session is active.
@@ -139,12 +171,12 @@ export default function SignUp() {
   const handleResend = async () => {
     if (busy || !cooldown.canResend) return;
     setPending("resend");
+    setLocalBanner(undefined);
     try {
       const { error } = await signUp.verifications.sendEmailCode();
       if (error) return fail(error);
       cooldown.start();
-      setErrors({});
-      setBanner(undefined);
+      setClientErrors({});
       setInfo("A new code is on its way.");
     } catch (error) {
       fail(error);
@@ -153,23 +185,25 @@ export default function SignUp() {
     }
   };
 
-  const editDetails = () => {
-    setStep("details");
+  const editDetails = async () => {
+    await signUp.reset();
     setCode("");
-    setErrors({});
-    setBanner(undefined);
+    setClientErrors({});
+    setLocalBanner(undefined);
     setInfo(undefined);
   };
 
-  if (step === "verify") {
+  if (needsEmailVerification) {
+    const sentTo = signUp.emailAddress ?? normalizeEmail(email);
+
     return (
       <AuthShell
         title='Check your inbox'
         subtitle={
           <>
             We sent a 6-digit code to{" "}
-            <Text className='auth-email-highlight'>{normalizeEmail(email)}</Text>
-            . Enter it below to activate your account.
+            <Text className='auth-email-highlight'>{sentTo}</Text>. Enter it
+            below to activate your account.
           </>
         }
         onBack={editDetails}
@@ -183,15 +217,15 @@ export default function SignUp() {
         }>
         <View className='auth-form'>
           <FormBanner message={banner} />
-          <FormBanner message={info} tone='info' />
+          {!banner && <FormBanner message={info} tone='info' />}
           <CodeField
             value={code}
             onChangeText={(value) => {
               setCode(value);
-              if (errors.code) setErrors({});
+              if (clientErrors.code) setClientErrors({});
             }}
             onComplete={handleVerify}
-            error={errors.code}
+            error={fieldErrors.code}
           />
           <AuthButton
             label='Verify email'
@@ -232,9 +266,11 @@ export default function SignUp() {
           onChangeText={(value) => {
             setFirstName(value);
             if (submitted)
-              setErrors(validateDetails({ firstName: value, email, password }));
+              setClientErrors(
+                validateDetails({ firstName: value, email, password }),
+              );
           }}
-          error={errors.firstName}
+          error={fieldErrors.firstName}
           placeholder='What should we call you?'
           autoCapitalize='words'
           autoComplete='given-name'
@@ -243,6 +279,7 @@ export default function SignUp() {
           submitBehavior='submit'
           onSubmitEditing={() => emailRef.current?.focus()}
           editable={!busy}
+          style={{ paddingStart: 8 }}
         />
 
         <AuthField
@@ -252,9 +289,11 @@ export default function SignUp() {
           onChangeText={(value) => {
             setEmail(value);
             if (submitted)
-              setErrors(validateDetails({ firstName, email: value, password }));
+              setClientErrors(
+                validateDetails({ firstName, email: value, password }),
+              );
           }}
-          error={errors.email}
+          error={fieldErrors.email}
           placeholder='you@example.com'
           keyboardType='email-address'
           autoCapitalize='none'
@@ -266,6 +305,7 @@ export default function SignUp() {
           onSubmitEditing={() => passwordRef.current?.focus()}
           editable={!busy}
           ltr
+          style={{ paddingStart: 8 }}
         />
 
         <AuthField
@@ -275,9 +315,11 @@ export default function SignUp() {
           onChangeText={(value) => {
             setPassword(value);
             if (submitted)
-              setErrors(validateDetails({ firstName, email, password: value }));
+              setClientErrors(
+                validateDetails({ firstName, email, password: value }),
+              );
           }}
-          error={errors.password}
+          error={fieldErrors.password}
           helper={<PasswordStrengthMeter password={password} />}
           placeholder='Create a password'
           secureToggle
@@ -289,6 +331,7 @@ export default function SignUp() {
           onSubmitEditing={handleSignUp}
           editable={!busy}
           ltr
+          style={{ paddingStart: 8 }}
         />
 
         <AuthButton

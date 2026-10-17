@@ -3,11 +3,6 @@ import { isClerkAPIResponseError } from "@clerk/expo";
 export type AuthFieldKey = "firstName" | "email" | "password" | "code";
 export type AuthFieldErrors = Partial<Record<AuthFieldKey, string>>;
 
-export interface AuthErrorResult {
-    fields: AuthFieldErrors;
-    message?: string;
-}
-
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export const PASSWORD_MIN_LENGTH = 8;
@@ -61,72 +56,68 @@ export const getPasswordStrength = (value: string): PasswordStrength => {
 export const hasErrors = (errors: AuthFieldErrors): boolean =>
     Object.values(errors).some(Boolean);
 
-/** Friendly, brand-native copy for known auth error codes. */
-const ERROR_COPY: Record<string, { message: string; field?: AuthFieldKey }> = {
-    form_identifier_not_found: { message: "We couldn't find an account with that email.", field: "email" },
-    form_password_incorrect: { message: "That password isn't right. Try again or reset it.", field: "password" },
-    form_password_pwned: {
-        message: "This password appeared in a data breach. Please choose a different one.",
-        field: "password",
-    },
-    form_password_validation_failed: { message: "That password isn't right.", field: "password" },
-    form_identifier_exists: { message: "An account with this email already exists. Sign in instead.", field: "email" },
-    form_param_format_invalid: { message: "Please check this field." },
-    form_code_incorrect: { message: "That code isn't right. Check your inbox and try again.", field: "code" },
-    verification_expired: { message: "This code has expired. Request a new one.", field: "code" },
-    verification_failed: { message: "Too many attempts. Request a new code.", field: "code" },
-    too_many_requests: { message: "Too many attempts. Please wait a moment and try again." },
-    session_exists: { message: "You're already signed in." },
-    strategy_for_user_invalid: { message: "This account can't sign in with a password." },
-    network_error: { message: "You appear to be offline. Check your connection and try again." },
-};
-
-const PARAM_TO_FIELD: Record<string, AuthFieldKey> = {
-    email_address: "email",
-    identifier: "email",
-    password: "password",
-    code: "code",
-    first_name: "firstName",
+/** Friendly, brand-native copy for known auth error codes. Unknown codes fall back to the server's message. */
+const ERROR_COPY: Record<string, string> = {
+    form_identifier_not_found: "We couldn't find an account with that email.",
+    form_password_incorrect: "That password isn't right. Try again or reset it.",
+    form_password_pwned: "This password appeared in a data breach. Please choose a different one.",
+    form_password_validation_failed: "That password isn't right.",
+    form_identifier_exists: "An account with this email already exists. Sign in instead.",
+    form_code_incorrect: "That code isn't right. Check your inbox and try again.",
+    verification_expired: "This code has expired. Request a new one.",
+    verification_failed: "Too many attempts. Request a new code.",
+    too_many_requests: "Too many attempts. Please wait a moment and try again.",
+    session_exists: "You're already signed in.",
+    strategy_for_user_invalid: "This account can't sign in with a password.",
+    network_error: "You appear to be offline. Check your connection and try again.",
 };
 
 const GENERIC_ERROR = "Something went wrong. Please try again.";
 
-/** Turns an auth API error into per-field messages plus an optional banner message. */
-export const parseAuthError = (error: unknown): AuthErrorResult => {
-    const result: AuthErrorResult = { fields: {} };
+interface ServerError {
+    code: string;
+    message: string;
+    longMessage?: string;
+}
 
+const describe = (error: ServerError): string =>
+    ERROR_COPY[error.code] ?? error.longMessage ?? error.message ?? GENERIC_ERROR;
+
+/** Message for one entry of the auth hooks' `errors.fields`. */
+export const describeFieldError = (error?: ServerError | null): string | undefined =>
+    error ? describe(error) : undefined;
+
+/** Banner message for the auth hooks' `errors.global` (errors not tied to a field, e.g. rate limits or network). */
+export const describeGlobalError = (errors?: readonly unknown[] | null): string | undefined => {
+    const error = errors?.[0];
+    if (!error) return undefined;
+    if (isClerkAPIResponseError(error) && error.errors[0]) return describe(error.errors[0]);
+    if (error && typeof error === "object" && "code" in error) {
+        const code = String((error as { code: unknown }).code);
+        if (ERROR_COPY[code]) return ERROR_COPY[code];
+    }
+    return GENERIC_ERROR;
+};
+
+const toCamelCase = (value: string) => value.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+
+/**
+ * The hooks drop field errors whose param has no matching key in `errors.fields`
+ * (e.g. `email_address` on a sign-in). Returns that message so it can still be shown.
+ */
+export const unmappedFieldError = (error: unknown, fieldKeys: readonly string[]): string | undefined => {
+    if (!isClerkAPIResponseError(error)) return undefined;
+    const unmapped = error.errors.find((apiError) => {
+        const paramName = apiError.meta?.paramName as string | undefined;
+        return paramName !== undefined && !fieldKeys.includes(toCamelCase(paramName));
+    });
+    return unmapped ? describe(unmapped) : undefined;
+};
+
+export const logAuthError = (error: unknown) => {
     if (__DEV__) {
         console.warn("[auth] request failed:", isClerkAPIResponseError(error) ? error.errors : error);
     }
-
-    if (isClerkAPIResponseError(error) && error.errors.length > 0) {
-        for (const apiError of error.errors) {
-            const known = ERROR_COPY[apiError.code];
-            const paramName = apiError.meta?.paramName as string | undefined;
-            const field = known?.field ?? (paramName ? PARAM_TO_FIELD[paramName] : undefined);
-            const message = known?.message ?? apiError.longMessage ?? apiError.message ?? GENERIC_ERROR;
-
-            if (field && !result.fields[field]) {
-                result.fields[field] = message;
-            } else if (!field && !result.message) {
-                result.message = message;
-            }
-        }
-        return result;
-    }
-
-    if (error && typeof error === "object" && "code" in error) {
-        const code = String((error as { code: unknown }).code);
-        const known = ERROR_COPY[code];
-        if (known) {
-            if (known.field) result.fields[known.field] = known.message;
-            else result.message = known.message;
-            return result;
-        }
-    }
-
-    result.message = GENERIC_ERROR;
-    return result;
 };
 
 export const maskEmail = (email: string): string => {

@@ -8,9 +8,12 @@ import ResendCode from "@/components/auth/ResendCode";
 import { useResendCooldown } from "@/hooks/useResendCooldown";
 import {
   AuthFieldErrors,
+  describeFieldError,
+  describeGlobalError,
   hasErrors,
+  logAuthError,
   normalizeEmail,
-  parseAuthError,
+  unmappedFieldError,
   validateCode,
   validateEmail,
   validateNewPassword,
@@ -18,31 +21,49 @@ import {
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { useSignIn } from "@clerk/expo";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-type Step = "email" | "reset";
 type Pending = "submit" | "reset" | "resend" | null;
 
 export default function ForgotPassword() {
-  const { signIn, fetchStatus } = useSignIn();
+  const { signIn, errors, fetchStatus } = useSignIn();
   const cooldown = useResendCooldown();
 
-  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<AuthFieldErrors>({});
-  const [banner, setBanner] = useState<string>();
+  const [clientErrors, setClientErrors] = useState<AuthFieldErrors>({});
+  const [localBanner, setLocalBanner] = useState<string>();
   const [info, setInfo] = useState<string>();
   const [pending, setPending] = useState<Pending>(null);
 
+  // Steps come from the sign-in attempt itself, so they survive remounts.
+  const codeVerified = signIn.status === "needs_new_password";
+  const resetting =
+    codeVerified ||
+    (signIn.status === "needs_first_factor" &&
+      signIn.firstFactorVerification?.strategy === "reset_password_email_code");
+
+  // Clear a stale sign-in attempt (and its errors), unless a reset is already in progress.
+  useEffect(() => {
+    if (!resetting) signIn.reset();
+    // Run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const busy = pending !== null || fetchStatus === "fetching";
+  const banner = localBanner ?? describeGlobalError(errors.global);
+  const fieldErrors = {
+    email: clientErrors.email ?? describeFieldError(errors.fields.identifier),
+    code: clientErrors.code ?? describeFieldError(errors.fields.code),
+    password:
+      clientErrors.password ?? describeFieldError(errors.fields.password),
+  };
 
   const fail = (error: unknown) => {
-    const parsed = parseAuthError(error);
-    setErrors(parsed.fields);
-    setBanner(parsed.message);
+    logAuthError(error);
+    setLocalBanner(unmappedFieldError(error, Object.keys(errors.fields)));
     setInfo(undefined);
     hapticError();
   };
@@ -55,9 +76,9 @@ export default function ForgotPassword() {
 
   const handleSendCode = async () => {
     if (busy) return;
+    setLocalBanner(undefined);
     const emailError = validateEmail(email);
-    setErrors({ email: emailError });
-    setBanner(undefined);
+    setClientErrors({ email: emailError });
     if (emailError) {
       hapticError();
       return;
@@ -65,15 +86,18 @@ export default function ForgotPassword() {
 
     setPending("submit");
     try {
-      const { error } = await signIn.create({ identifier: normalizeEmail(email) });
+      const { error } = await signIn.create({
+        identifier: normalizeEmail(email),
+      });
       if (error) return fail(error);
 
-      const { error: sendError } = await signIn.resetPasswordEmailCode.sendCode();
+      // Switches this screen to the reset step via `resetting`.
+      const { error: sendError } =
+        await signIn.resetPasswordEmailCode.sendCode();
       if (sendError) return fail(sendError);
 
       cooldown.start();
-      setErrors({});
-      setStep("reset");
+      setClientErrors({});
     } catch (error) {
       fail(error);
     } finally {
@@ -83,14 +107,13 @@ export default function ForgotPassword() {
 
   const handleReset = async () => {
     if (busy) return;
-    const codeVerified = signIn.status === "needs_new_password";
-    const fieldErrors: AuthFieldErrors = {
+    setLocalBanner(undefined);
+    const nextErrors: AuthFieldErrors = {
       code: codeVerified ? undefined : validateCode(code),
       password: validateNewPassword(password),
     };
-    setErrors(fieldErrors);
-    setBanner(undefined);
-    if (hasErrors(fieldErrors)) {
+    setClientErrors(nextErrors);
+    if (hasErrors(nextErrors)) {
       hapticError();
       return;
     }
@@ -99,7 +122,9 @@ export default function ForgotPassword() {
     try {
       // Skip re-verifying if the code was accepted and only the password was rejected.
       if (!codeVerified) {
-        const { error } = await signIn.resetPasswordEmailCode.verifyCode({ code });
+        const { error } = await signIn.resetPasswordEmailCode.verifyCode({
+          code,
+        });
         if (error) return fail(error);
       }
 
@@ -118,8 +143,23 @@ export default function ForgotPassword() {
         return;
       }
 
-      // Password changed, but the account needs an extra check: sign in normally.
       hapticSuccess();
+      const needsSecondStep =
+        signIn.status === "needs_second_factor" ||
+        signIn.status === "needs_client_trust";
+      const supportsEmail = signIn.supportedSecondFactors?.some(
+        (factor) => factor.strategy === "email_code",
+      );
+
+      if (needsSecondStep && supportsEmail) {
+        // Sign-in derives its code step from this same attempt.
+        const { error: sendError } = await signIn.mfa.sendEmailCode();
+        if (sendError) return fail(sendError);
+        router.dismissTo("/sign-in");
+        return;
+      }
+
+      // Password changed, but this account needs a fresh sign-in.
       await signIn.reset();
       router.dismissTo({ pathname: "/sign-in", params: { reset: "1" } });
     } catch (error) {
@@ -132,12 +172,12 @@ export default function ForgotPassword() {
   const handleResend = async () => {
     if (busy || !cooldown.canResend) return;
     setPending("resend");
+    setLocalBanner(undefined);
     try {
       const { error } = await signIn.resetPasswordEmailCode.sendCode();
       if (error) return fail(error);
       cooldown.start();
-      setErrors({});
-      setBanner(undefined);
+      setClientErrors({});
       setInfo("A new code is on its way.");
     } catch (error) {
       fail(error);
@@ -155,41 +195,45 @@ export default function ForgotPassword() {
     </View>
   );
 
-  if (step === "reset") {
-    const codeVerified = signIn.status === "needs_new_password";
+  if (resetting) {
+    const sentTo = signIn.identifier ?? normalizeEmail(email);
 
     return (
       <AuthShell
         title='Set a new password'
         subtitle={
-          <>
-            Enter the code we sent to{" "}
-            <Text className='auth-email-highlight'>{normalizeEmail(email)}</Text>{" "}
-            and choose a new password.
-          </>
+          codeVerified ? (
+            "Code confirmed. Choose a new password to finish."
+          ) : (
+            <>
+              Enter the code we sent to{" "}
+              <Text className='auth-email-highlight'>{sentTo}</Text> and choose
+              a new password.
+            </>
+          )
         }
         onBack={() => {
           signIn.reset();
-          setStep("email");
           setCode("");
           setPassword("");
-          setErrors({});
-          setBanner(undefined);
+          setClientErrors({});
+          setLocalBanner(undefined);
           setInfo(undefined);
         }}
         footer={footer}>
         <View className='auth-form'>
           <FormBanner message={banner} />
-          <FormBanner message={info} tone='info' />
+          {!banner && <FormBanner message={info} tone='info' />}
 
           {!codeVerified && (
             <CodeField
               value={code}
               onChangeText={(value) => {
                 setCode(value);
-                if (errors.code) setErrors((prev) => ({ ...prev, code: undefined }));
+                if (clientErrors.code)
+                  setClientErrors((prev) => ({ ...prev, code: undefined }));
               }}
-              error={errors.code}
+              error={fieldErrors.code}
             />
           )}
 
@@ -198,10 +242,13 @@ export default function ForgotPassword() {
             value={password}
             onChangeText={(value) => {
               setPassword(value);
-              if (errors.password)
-                setErrors((prev) => ({ ...prev, password: validateNewPassword(value) }));
+              if (clientErrors.password)
+                setClientErrors((prev) => ({
+                  ...prev,
+                  password: validateNewPassword(value),
+                }));
             }}
-            error={errors.password}
+            error={fieldErrors.password}
             helper={<PasswordStrengthMeter password={password} />}
             placeholder='Create a new password'
             secureToggle
@@ -248,9 +295,10 @@ export default function ForgotPassword() {
           value={email}
           onChangeText={(value) => {
             setEmail(value);
-            if (errors.email) setErrors({ email: validateEmail(value) });
+            if (clientErrors.email)
+              setClientErrors({ email: validateEmail(value) });
           }}
-          error={errors.email}
+          error={fieldErrors.email}
           placeholder='you@example.com'
           keyboardType='email-address'
           autoCapitalize='none'

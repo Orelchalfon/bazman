@@ -1,56 +1,69 @@
-import { colors } from "@/constants/theme";
-import { useClerk, useUser } from "@clerk/expo";
-import clsx from "clsx";
-import { styled } from "nativewind";
-import React, { useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Text, View, Pressable, Image } from 'react-native'
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
+import { styled } from "nativewind";
+import { useClerk, useUser } from '@clerk/expo';
+import images from '@/constants/images';
 const SafeAreaView = styled(RNSafeAreaView);
 
 const Settings = () => {
-  const { user } = useUser();
-  const { signOut } = useClerk();
-  const [signingOut, setSigningOut] = useState(false);
+    const { signOut } = useClerk();
+    const { user } = useUser();
 
-  const handleSignOut = async () => {
-    if (signingOut) return;
-    setSigningOut(true);
-    try {
-      // The root navigator's protected routes send the user back to sign-in.
-      await signOut();
-    } catch (error) {
-      console.error("Sign out failed:", error);
-      setSigningOut(false);
-    }
-  };
+    const handleSignOut = async () => {
+        await signOut();
+    };
 
-  return (
-    <SafeAreaView className='flex-1 bg-background p-5 gap-5'>
-      <Text className='list-title'>Settings</Text>
+    const displayName = user?.firstName || user?.fullName || user?.emailAddresses[0]?.emailAddress || 'User';
+    const email = user?.emailAddresses[0]?.emailAddress;
 
-      <View className='settings-card'>
-        <Text className='settings-name'>
-          {user?.firstName ?? user?.fullName ?? "Your account"}
-        </Text>
-        <Text className='settings-email'>
-          {user?.primaryEmailAddress?.emailAddress}
-        </Text>
+    return (
+        <SafeAreaView className="flex-1 bg-background p-5">
+            <Text className="text-3xl font-sans-bold text-primary mb-6">Settings</Text>
 
-        <Pressable
-          onPress={handleSignOut}
-          disabled={signingOut}
-          accessibilityRole='button'
-          accessibilityState={{ busy: signingOut }}
-          className={clsx("sub-cancel mt-5", signingOut && "sub-cancel-disabled")}>
-          {signingOut ? (
-            <ActivityIndicator color={colors.background} />
-          ) : (
-            <Text className='sub-cancel-text'>Sign out</Text>
-          )}
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
-};
+            {/* User Profile Section */}
+            <View className="auth-card mb-5">
+                <View className="flex-row items-center gap-4 mb-4">
+                    <Image
+                        source={user?.imageUrl ? { uri: user.imageUrl } : images.avatar}
+                        className="size-16 rounded-full"
+                    />
+                    <View className="flex-1">
+                        <Text className="text-lg font-sans-bold text-primary">{displayName}</Text>
+                        {email && (
+                            <Text className="text-sm font-sans-medium text-muted-foreground">{email}</Text>
+                        )}
+                    </View>
+                </View>
+            </View>
 
-export default Settings;
+            {/* Account Section */}
+            <View className="auth-card mb-5">
+                <Text className="text-base font-sans-semibold text-primary mb-3">Account</Text>
+                <View className="gap-2">
+                    <View className="flex-row justify-between items-center py-2">
+                        <Text className="text-sm font-sans-medium text-muted-foreground">Account ID</Text>
+                        <Text className="text-sm font-sans-medium text-primary" numberOfLines={1} ellipsizeMode="tail">
+                            {user?.id?.substring(0, 20)}...
+                        </Text>
+                    </View>
+                    <View className="flex-row justify-between items-center py-2">
+                        <Text className="text-sm font-sans-medium text-muted-foreground">Joined</Text>
+                        <Text className="text-sm font-sans-medium text-primary">
+                            {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                        </Text>
+                    </View>
+                </View>
+            </View>
+
+            {/* Sign Out Button */}
+            <Pressable
+                className="auth-button bg-destructive"
+                onPress={handleSignOut}
+            >
+                <Text className="auth-button-text text-white">Sign Out</Text>
+            </Pressable>
+        </SafeAreaView>
+    )
+}
+
+export default Settings
