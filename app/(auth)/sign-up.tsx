@@ -29,6 +29,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 type Pending = "submit" | "verify" | "resend" | null;
 
+/** Renders account registration and email verification, tracking completed sign-ups. */
 export default function SignUp() {
   const { signUp, errors, fetchStatus } = useSignUp();
   const cooldown = useResendCooldown();

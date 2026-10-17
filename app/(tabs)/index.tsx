@@ -17,6 +17,7 @@ import { FlatList, Image, Pressable, Text, View } from "react-native";
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 const SafeAreaView = styled(RNSafeAreaView);
 
+/** Renders the subscription dashboard and tracks subscription card expansions. */
 export default function App() {
   const { user } = useUser();
   const posthog = usePostHog();

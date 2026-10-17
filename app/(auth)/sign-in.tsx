@@ -28,6 +28,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 type Pending = "submit" | "verify" | "resend" | null;
 
+/** Renders password sign-in and email verification, tracking completed sign-ins. */
 export default function SignIn() {
   const { signIn, errors, fetchStatus } = useSignIn();
   const { reset } = useLocalSearchParams<{ reset?: string }>();

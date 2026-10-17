@@ -27,6 +27,7 @@ import { Pressable, Text, View } from "react-native";
 
 type Pending = "submit" | "reset" | "resend" | null;
 
+/** Renders email code password recovery and tracks successful password resets. */
 export default function ForgotPassword() {
   const { signIn, errors, fetchStatus } = useSignIn();
   const cooldown = useResendCooldown();
